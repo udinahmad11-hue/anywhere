@@ -2,71 +2,41 @@ const http = require("http");
 const https = require("https");
 const { URL } = require("url");
 
+const host = "0.0.0.0";
 const port = process.env.PORT || 3000;
 
+// Helper: choose HTTP or HTTPS client
+function requestClient(url) {
+  return url.startsWith("https") ? https : http;
+}
+
 const server = http.createServer((req, res) => {
-  // ====== CORS FIX ======
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "*");
-
-  if (req.method === "OPTIONS") {
-    res.writeHead(200);
-    return res.end();
-  }
-
-  // ====== ROOT PATH ======
+  // Example: /https://google.com
   if (!req.url || req.url === "/") {
     res.writeHead(200, { "Content-Type": "text/plain" });
-    return res.end(
-      "CORS Proxy Running\nUsage:\nhttps://yourapp.koyeb.app/https://example.com/file.mpd"
-    );
+    res.end("Simple CORS Proxy is running.\nUsage: /https://example.com");
+    return;
   }
 
-  // ====== AMBIL TARGET URL ======
-  const targetClean = req.url.slice(1); // remove leading "/"
+  const target = req.url.slice(1); // remove leading "/"
+
   let targetUrl;
-
   try {
-    targetUrl = new URL(targetClean);
-  } catch (err) {
+    targetUrl = new URL(target);
+  } catch (e) {
     res.writeHead(400, { "Content-Type": "text/plain" });
-    return res.end("Invalid target URL");
+    return res.end("Invalid URL");
   }
 
-  // ====== PILIH http / https ======
-  const client = targetUrl.protocol === "https:" ? https : http;
-
-  // ====== BUILD REQUEST OPTIONS BENAR ======
-  const options = {
-    protocol: targetUrl.protocol,
-    hostname: targetUrl.hostname,
-    port:
-      targetUrl.port ||
-      (targetUrl.protocol === "https:" ? 443 : 80),
-    path: targetUrl.pathname + targetUrl.search,
-    method: "GET",
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
-      "Accept": "*/*",
-      "Host": targetUrl.hostname,
-      "Referer": targetUrl.origin
-    }
-  };
-
-  console.log("Proxy →", options);
-
-  // ====== KIRIM REQUEST ======
-  const proxyReq = client.request(options, (proxyRes) => {
-    // Forward headers dari server target
+  const proxyReq = requestClient(targetUrl.href).get(targetUrl.href, (proxyRes) => {
+    // Copy status + headers
     res.writeHead(proxyRes.statusCode, {
       ...proxyRes.headers,
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers": "*"
+      "access-control-allow-origin": "*",
+      "access-control-allow-headers": "*"
     });
 
-    // forward data stream
+    // Pipe the data for streaming
     proxyRes.pipe(res);
   });
 
@@ -74,10 +44,8 @@ const server = http.createServer((req, res) => {
     res.writeHead(500, { "Content-Type": "text/plain" });
     res.end("Proxy error: " + err.message);
   });
-
-  proxyReq.end();
 });
 
-server.listen(port, () => {
-  console.log("Proxy server running on port " + port);
+server.listen(port, host, () => {
+  console.log(`CORS Proxy running at http://${host}:${port}`);
 });
