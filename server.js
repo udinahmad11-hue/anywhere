@@ -2,50 +2,68 @@ const http = require("http");
 const https = require("https");
 const { URL } = require("url");
 
-const host = "0.0.0.0";
 const port = process.env.PORT || 3000;
 
-// Helper: choose HTTP or HTTPS client
-function requestClient(url) {
+function client(url) {
   return url.startsWith("https") ? https : http;
 }
 
 const server = http.createServer((req, res) => {
-  // Example: /https://google.com
-  if (!req.url || req.url === "/") {
-    res.writeHead(200, { "Content-Type": "text/plain" });
-    res.end("Simple CORS Proxy is running.\nUsage: /https://example.com");
-    return;
+  // === CORS ===
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "*");
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(200);
+    return res.end();
   }
 
-  const target = req.url.slice(1); // remove leading "/"
+  if (!req.url || req.url === "/") {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    return res.end("Streaming Proxy Active");
+  }
 
+  const target = req.url.slice(1);
   let targetUrl;
+
   try {
     targetUrl = new URL(target);
-  } catch (e) {
+  } catch (err) {
     res.writeHead(400, { "Content-Type": "text/plain" });
     return res.end("Invalid URL");
   }
 
-  const proxyReq = requestClient(targetUrl.href).get(targetUrl.href, (proxyRes) => {
-    // Copy status + headers
-    res.writeHead(proxyRes.statusCode, {
-      ...proxyRes.headers,
-      "access-control-allow-origin": "*",
-      "access-control-allow-headers": "*"
-    });
+  // === FIX utama untuk streaming ===
+  const headers = {
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36",
+    "Referer": "https://www.starhubgo.com/",
+    "Origin": "https://www.starhubgo.com",
+    "Accept": "*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "identity", // wajib untuk streaming
+    "Host": targetUrl.hostname,
+  };
 
-    // Pipe the data for streaming
+  const options = {
+    method: "GET",
+    headers,
+  };
+
+  const proxy = client(targetUrl.href).request(targetUrl, options, (proxyRes) => {
+    res.writeHead(proxyRes.statusCode, proxyRes.headers);
     proxyRes.pipe(res);
   });
 
-  proxyReq.on("error", (err) => {
+  proxy.on("error", (err) => {
     res.writeHead(500, { "Content-Type": "text/plain" });
     res.end("Proxy error: " + err.message);
   });
+
+  proxy.end();
 });
 
-server.listen(port, host, () => {
-  console.log(`CORS Proxy running at http://${host}:${port}`);
+server.listen(port, () => {
+  console.log("Streaming proxy running on port " + port);
 });
