@@ -4,12 +4,8 @@ const { URL } = require("url");
 
 const port = process.env.PORT || 3000;
 
-function client(url) {
-  return url.startsWith("https") ? https : http;
-}
-
 const server = http.createServer((req, res) => {
-  // === CORS ===
+  // ====== CORS FIX ======
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "*");
@@ -19,51 +15,69 @@ const server = http.createServer((req, res) => {
     return res.end();
   }
 
+  // ====== ROOT PATH ======
   if (!req.url || req.url === "/") {
     res.writeHead(200, { "Content-Type": "text/plain" });
-    return res.end("Streaming Proxy Active");
+    return res.end(
+      "CORS Proxy Running\nUsage:\nhttps://yourapp.koyeb.app/https://example.com/file.mpd"
+    );
   }
 
-  const target = req.url.slice(1);
+  // ====== AMBIL TARGET URL ======
+  const targetClean = req.url.slice(1); // remove leading "/"
   let targetUrl;
 
   try {
-    targetUrl = new URL(target);
+    targetUrl = new URL(targetClean);
   } catch (err) {
     res.writeHead(400, { "Content-Type": "text/plain" });
-    return res.end("Invalid URL");
+    return res.end("Invalid target URL");
   }
 
-  // === FIX utama untuk streaming ===
-  const headers = {
-    "User-Agent":
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36",
-    "Referer": "https://www.starhubgo.com/",
-    "Origin": "https://www.starhubgo.com",
-    "Accept": "*/*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "identity", // wajib untuk streaming
-    "Host": targetUrl.hostname,
-  };
+  // ====== PILIH http / https ======
+  const client = targetUrl.protocol === "https:" ? https : http;
 
+  // ====== BUILD REQUEST OPTIONS BENAR ======
   const options = {
+    protocol: targetUrl.protocol,
+    hostname: targetUrl.hostname,
+    port:
+      targetUrl.port ||
+      (targetUrl.protocol === "https:" ? 443 : 80),
+    path: targetUrl.pathname + targetUrl.search,
     method: "GET",
-    headers,
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+      "Accept": "*/*",
+      "Host": targetUrl.hostname,
+      "Referer": targetUrl.origin
+    }
   };
 
-  const proxy = client(targetUrl.href).request(targetUrl, options, (proxyRes) => {
-    res.writeHead(proxyRes.statusCode, proxyRes.headers);
+  console.log("Proxy →", options);
+
+  // ====== KIRIM REQUEST ======
+  const proxyReq = client.request(options, (proxyRes) => {
+    // Forward headers dari server target
+    res.writeHead(proxyRes.statusCode, {
+      ...proxyRes.headers,
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "*"
+    });
+
+    // forward data stream
     proxyRes.pipe(res);
   });
 
-  proxy.on("error", (err) => {
+  proxyReq.on("error", (err) => {
     res.writeHead(500, { "Content-Type": "text/plain" });
     res.end("Proxy error: " + err.message);
   });
 
-  proxy.end();
+  proxyReq.end();
 });
 
 server.listen(port, () => {
-  console.log("Streaming proxy running on port " + port);
+  console.log("Proxy server running on port " + port);
 });
