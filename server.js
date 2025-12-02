@@ -1,7 +1,6 @@
 const http = require("http");
 const https = require("https");
 const { URL } = require("url");
-const querystring = require("querystring");
 
 const host = "0.0.0.0";
 const port = process.env.PORT || 3000;
@@ -11,8 +10,8 @@ function requestClient(url) {
   return url.startsWith("https") ? https : http;
 }
 
-// Headers untuk request ke API MPD Checker
-const mpdCheckerHeaders = {
+// Headers untuk request ke MPD Checker API
+const MPD_CHECKER_HEADERS = {
   "accept": "*/*",
   "accept-language": "en-US,en;q=0.9,id;q=0.8",
   "origin": "https://webiptv.site",
@@ -27,40 +26,40 @@ const mpdCheckerHeaders = {
   "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
 };
 
-// Fungsi untuk mengambil token dari MPD Checker
-function getMPDToken(channelPath) {
+// Fungsi untuk mendapatkan token dari MPD Checker
+async function getMPDToken(channelPath) {
   return new Promise((resolve, reject) => {
-    const baseUrl = "https://ucdn.starhubgo.com/bpk-tv/";
-    const targetUrl = baseUrl + channelPath;
+    // Build target URL
+    const targetUrl = `https://ucdn.starhubgo.com/bpk-tv/${channelPath}`;
     const encodedUrl = encodeURIComponent(targetUrl);
     const apiUrl = `https://mpdchecker.updatesbyrahul.site/output.php?url=${encodedUrl}`;
-
-    console.log(`Requesting token for: ${channelPath}`);
+    
+    console.log(`Getting token for: ${channelPath}`);
     console.log(`API URL: ${apiUrl}`);
-
-    const req = https.get(apiUrl, { headers: mpdCheckerHeaders }, (res) => {
+    
+    const req = https.get(apiUrl, { headers: MPD_CHECKER_HEADERS }, (res) => {
       let data = '';
-
+      
       res.on('data', (chunk) => {
         data += chunk;
       });
-
+      
       res.on('end', () => {
         if (res.statusCode === 200) {
-          const token = data.trim();
-          console.log(`Got token: ${token.substring(0, 50)}...`);
-          resolve(token);
+          const tokenUrl = data.trim();
+          console.log(`Got token URL: ${tokenUrl}`);
+          resolve(tokenUrl);
         } else {
-          reject(new Error(`API returned status ${res.statusCode}: ${data}`));
+          reject(new Error(`MPD Checker API returned ${res.statusCode}`));
         }
       });
     });
-
+    
     req.on('error', (err) => {
       reject(err);
     });
-
-    req.setTimeout(30000, () => {
+    
+    req.setTimeout(10000, () => {
       req.destroy();
       reject(new Error('Request timeout'));
     });
@@ -68,11 +67,9 @@ function getMPDToken(channelPath) {
 }
 
 const server = http.createServer(async (req, res) => {
-  console.log(`\n=== New Request ===`);
-  console.log(`Method: ${req.method}`);
-  console.log(`URL: ${req.url}`);
-
-  // Handle OPTIONS for CORS preflight
+  console.log(`\n=== Request: ${req.method} ${req.url} ===`);
+  
+  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     res.writeHead(200, {
       'access-control-allow-origin': '*',
@@ -82,11 +79,11 @@ const server = http.createServer(async (req, res) => {
     });
     return res.end();
   }
-
-  // Handle root path
-  if (!req.url || req.url === "/" || req.url === "/favicon.ico") {
+  
+  // Home page
+  if (req.url === "/" || req.url === "/favicon.ico") {
     res.writeHead(200, { "Content-Type": "text/html" });
-    res.end(`
+    return res.end(`
       <!DOCTYPE html>
       <html>
       <head>
@@ -116,6 +113,7 @@ const server = http.createServer(async (req, res) => {
         <ul>
           <li><a href="/HubPremier1/output/manifest.mpd">HubPremier1</a></li>
           <li><a href="/HubPremier2/output/manifest.mpd">HubPremier2</a></li>
+          <li><a href="/HubSports3HDNEW/output/manifest.mpd">HubSports3HDNEW</a></li>
           <li><a href="/SPOTVNEW/output/manifest.mpd">SPOTVNEW</a></li>
           <li><a href="/SPOTV2NEW/output/manifest.mpd">SPOTV2NEW</a></li>
         </ul>
@@ -125,80 +123,82 @@ const server = http.createServer(async (req, res) => {
       </body>
       </html>
     `);
-    return;
   }
-
+  
   try {
-    // Ekstrak channel path dari URL
-    // Contoh: /HubPremier1/output/manifest.mpd
+    // Extract channel path from URL (remove leading slash)
     const channelPath = req.url.startsWith('/') ? req.url.substring(1) : req.url;
     
-    console.log(`Channel path: ${channelPath}`);
-    
-    // Validasi format path
-    if (!channelPath) {
+    // Validate path format
+    if (!channelPath.includes('/output/manifest.mpd')) {
       res.writeHead(400, { "Content-Type": "text/plain" });
-      return res.end("ERROR: Path tidak ditemukan");
+      return res.end("ERROR: Path harus mengikuti format: /{channel}/output/manifest.mpd\n\nContoh: /HubPremier1/output/manifest.mpd");
     }
-
-    // Dapatkan token dari MPD Checker
-    let token;
+    
+    // Step 1: Get token URL from MPD Checker
+    let tokenUrl;
     try {
-      token = await getMPDToken(channelPath);
+      tokenUrl = await getMPDToken(channelPath);
     } catch (error) {
-      console.error(`Error getting MPD token: ${error.message}`);
+      console.error(`Error getting token: ${error.message}`);
       res.writeHead(502, { "Content-Type": "text/plain" });
-      return res.end(`ERROR: Gagal mengambil token MPD.\n${error.message}`);
+      return res.end(`ERROR: Gagal mengambil token MPD\n${error.message}`);
     }
-
-    // Bangun URL final untuk streaming
-    // Token dari API sudah berupa URL lengkap, jadi kita bisa langsung gunakan
-    const finalUrl = token;
     
-    console.log(`Final streaming URL: ${finalUrl}`);
+    // Validate token URL
+    if (!tokenUrl || !tokenUrl.startsWith('http')) {
+      console.error(`Invalid token URL: ${tokenUrl}`);
+      res.writeHead(502, { "Content-Type": "text/plain" });
+      return res.end(`ERROR: Token URL tidak valid: ${tokenUrl}`);
+    }
     
-    // Parse URL untuk proxy
+    console.log(`Proxying to token URL: ${tokenUrl}`);
+    
+    // Step 2: Parse the token URL
     let targetUrl;
     try {
-      targetUrl = new URL(finalUrl);
+      targetUrl = new URL(tokenUrl);
     } catch (e) {
-      console.error(`Invalid final URL: ${finalUrl}`);
+      console.error(`Invalid URL format: ${tokenUrl}`);
       res.writeHead(500, { "Content-Type": "text/plain" });
-      return res.end(`ERROR: URL final tidak valid: ${finalUrl}`);
+      return res.end(`ERROR: Format URL tidak valid\n${tokenUrl}`);
     }
-
-    // Proxy ke URL final
-    const proxyReq = requestClient(targetUrl.href).get(targetUrl.href, { 
-      headers: {
-        ...req.headers,
-        host: targetUrl.host,
-        origin: targetUrl.origin,
-        referer: targetUrl.origin
+    
+    // Step 3: Proxy to the token URL
+    const proxyReq = requestClient(targetUrl.href).get(targetUrl.href, (proxyRes) => {
+      console.log(`Proxy response: ${proxyRes.statusCode}`);
+      
+      // Copy headers and add CORS
+      const headers = { ...proxyRes.headers };
+      
+      // Add CORS headers
+      headers['access-control-allow-origin'] = '*';
+      headers['access-control-allow-headers'] = '*';
+      headers['access-control-allow-methods'] = 'GET, HEAD, OPTIONS';
+      headers['access-control-expose-headers'] = '*';
+      
+      // Remove content-length if it exists (let Node.js handle it)
+      if (headers['content-length']) {
+        delete headers['content-length'];
       }
-    }, (proxyRes) => {
-      // Set CORS headers
-      const headers = {
-        ...proxyRes.headers,
-        "access-control-allow-origin": "*",
-        "access-control-allow-headers": "*",
-        "access-control-allow-methods": "GET, HEAD, OPTIONS",
-        "access-control-expose-headers": "*"
-      };
-
+      
       res.writeHead(proxyRes.statusCode, headers);
+      
+      // Pipe the response
       proxyRes.pipe(res);
     });
-
+    
     proxyReq.on('error', (err) => {
       console.error(`Proxy error: ${err.message}`);
-      res.writeHead(500, { "Content-Type": "text/plain" });
-      res.end("Proxy error: " + err.message);
+      res.writeHead(502, { "Content-Type": "text/plain" });
+      res.end(`ERROR: Proxy error\n${err.message}`);
     });
-
+    
+    // Handle client disconnect
     req.on('close', () => {
       proxyReq.destroy();
     });
-
+    
   } catch (error) {
     console.error(`Server error: ${error.message}`);
     console.error(error.stack);
@@ -224,5 +224,8 @@ process.on('SIGTERM', () => {
 
 server.listen(port, host, () => {
   console.log(`StarHub MPD Proxy running at http://${host}:${port}`);
-  console.log(`Example: http://${host}:${port}/HubPremier1/output/manifest.mpd`);
+  console.log(`Example URLs:`);
+  console.log(`  http://${host}:${port}/HubPremier1/output/manifest.mpd`);
+  console.log(`  http://${host}:${port}/HubSports3HDNEW/output/manifest.mpd`);
+  console.log(`  http://${host}:${port}/SPOTV2NEW/output/manifest.mpd`);
 });
