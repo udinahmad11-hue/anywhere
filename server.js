@@ -67,39 +67,10 @@ function getMPDToken(channelPath) {
   });
 }
 
-// Fungsi untuk proxy streaming langsung
-function proxyStream(req, res, targetUrl) {
-  console.log(`Proxying to: ${targetUrl}`);
-
-  const proxyReq = requestClient(targetUrl).get(targetUrl, (proxyRes) => {
-    // Set CORS headers
-    const headers = {
-      ...proxyRes.headers,
-      "access-control-allow-origin": "*",
-      "access-control-allow-headers": "*",
-      "access-control-allow-methods": "GET, HEAD, OPTIONS"
-    };
-
-    res.writeHead(proxyRes.statusCode, headers);
-    proxyRes.pipe(res);
-  });
-
-  proxyReq.on('error', (err) => {
-    console.error(`Proxy error: ${err.message}`);
-    res.writeHead(500, { "Content-Type": "text/plain" });
-    res.end("Proxy error: " + err.message);
-  });
-
-  req.on('close', () => {
-    proxyReq.destroy();
-  });
-}
-
 const server = http.createServer(async (req, res) => {
   console.log(`\n=== New Request ===`);
   console.log(`Method: ${req.method}`);
   console.log(`URL: ${req.url}`);
-  console.log(`Headers:`, req.headers);
 
   // Handle OPTIONS for CORS preflight
   if (req.method === 'OPTIONS') {
@@ -164,10 +135,10 @@ const server = http.createServer(async (req, res) => {
     
     console.log(`Channel path: ${channelPath}`);
     
-    // Validasi format path (harus mengandung /output/manifest.mpd)
-    if (!channelPath.includes('/output/manifest.mpd')) {
+    // Validasi format path
+    if (!channelPath) {
       res.writeHead(400, { "Content-Type": "text/plain" });
-      return res.end("ERROR: Path harus mengikuti format: /{channel}/output/manifest.mpd");
+      return res.end("ERROR: Path tidak ditemukan");
     }
 
     // Dapatkan token dari MPD Checker
@@ -181,13 +152,52 @@ const server = http.createServer(async (req, res) => {
     }
 
     // Bangun URL final untuk streaming
-    // Sesuaikan dengan server streaming yang tersedia
-    const finalUrl = `https://polite-cody-udinlaw-3ba6e1b2.koyeb.app/${token}`;
+    // Token dari API sudah berupa URL lengkap, jadi kita bisa langsung gunakan
+    const finalUrl = token;
     
     console.log(`Final streaming URL: ${finalUrl}`);
     
+    // Parse URL untuk proxy
+    let targetUrl;
+    try {
+      targetUrl = new URL(finalUrl);
+    } catch (e) {
+      console.error(`Invalid final URL: ${finalUrl}`);
+      res.writeHead(500, { "Content-Type": "text/plain" });
+      return res.end(`ERROR: URL final tidak valid: ${finalUrl}`);
+    }
+
     // Proxy ke URL final
-    proxyStream(req, res, finalUrl);
+    const proxyReq = requestClient(targetUrl.href).get(targetUrl.href, { 
+      headers: {
+        ...req.headers,
+        host: targetUrl.host,
+        origin: targetUrl.origin,
+        referer: targetUrl.origin
+      }
+    }, (proxyRes) => {
+      // Set CORS headers
+      const headers = {
+        ...proxyRes.headers,
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "*",
+        "access-control-allow-methods": "GET, HEAD, OPTIONS",
+        "access-control-expose-headers": "*"
+      };
+
+      res.writeHead(proxyRes.statusCode, headers);
+      proxyRes.pipe(res);
+    });
+
+    proxyReq.on('error', (err) => {
+      console.error(`Proxy error: ${err.message}`);
+      res.writeHead(500, { "Content-Type": "text/plain" });
+      res.end("Proxy error: " + err.message);
+    });
+
+    req.on('close', () => {
+      proxyReq.destroy();
+    });
 
   } catch (error) {
     console.error(`Server error: ${error.message}`);
