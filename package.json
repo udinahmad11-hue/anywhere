@@ -1,8 +1,16 @@
 {
   "name": "simple-cors-proxy",
   "version": "1.0.0",
+  "description": "A simple CORS proxy server",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["cors", "proxy"],
+  "author": "udinlaw",
+  "license": "MIT",
+  "engines": {
+    "node": ">=12.0.0"
   }
 }
