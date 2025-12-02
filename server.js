@@ -2,63 +2,50 @@ const http = require("http");
 const https = require("https");
 const { URL } = require("url");
 
-const PORT = process.env.PORT || 3000;
+const host = "0.0.0.0";
+const port = process.env.PORT || 3000;
 
-// Get token from MPD Checker API
-async function getToken(channel) {
-  const target = `https://ucdn.starhubgo.com/bpk-tv/${channel}`;
-  const apiUrl = `https://mpdchecker.updatesbyrahul.site/output.php?url=${encodeURIComponent(target)}`;
-  
-  return new Promise((resolve, reject) => {
-    const req = https.get(apiUrl, {
-      headers: {
-        "accept": "*/*",
-        "user-agent": "Mozilla/5.0",
-        "origin": "https://webiptv.site",
-        "referer": "https://webiptv.site/"
-      }
-    }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => res.statusCode === 200 ? resolve(data.trim()) : reject());
-    });
-    req.on('error', reject);
-  });
+// Helper: choose HTTP or HTTPS client
+function requestClient(url) {
+  return url.startsWith("https") ? https : http;
 }
 
-const server = http.createServer(async (req, res) => {
-  // Set CORS headers
-  res.setHeader("access-control-allow-origin", "*");
-  res.setHeader("access-control-allow-headers", "*");
-  
-  // Root path
-  if (req.url === "/") {
-    res.end("StarHub Proxy - Use: /{channel}/output/manifest.mpd");
+const server = http.createServer((req, res) => {
+  // Example: /https://google.com
+  if (!req.url || req.url === "/") {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("Simple CORS Proxy is running.\nUsage: /https://example.com");
     return;
   }
-  
+
+  const target = req.url.slice(1); // remove leading "/"
+
+  let targetUrl;
   try {
-    // Get token URL
-    const token = await getToken(req.url.substring(1));
-    
-    // Proxy to token URL
-    const target = new URL(token);
-    const proxy = target.protocol === 'https:' ? https : http;
-    
-    proxy.get(target.href, (proxyRes) => {
-      res.writeHead(proxyRes.statusCode, proxyRes.headers);
-      proxyRes.pipe(res);
-    }).on('error', () => {
-      res.writeHead(500);
-      res.end("Proxy error");
-    });
-    
-  } catch {
-    res.writeHead(500);
-    res.end("Error getting stream");
+    targetUrl = new URL(target);
+  } catch (e) {
+    res.writeHead(400, { "Content-Type": "text/plain" });
+    return res.end("Invalid URL");
   }
+
+  const proxyReq = requestClient(targetUrl.href).get(targetUrl.href, (proxyRes) => {
+    // Copy status + headers
+    res.writeHead(proxyRes.statusCode, {
+      ...proxyRes.headers,
+      "access-control-allow-origin": "*",
+      "access-control-allow-headers": "*"
+    });
+
+    // Pipe the data for streaming
+    proxyRes.pipe(res);
+  });
+
+  proxyReq.on("error", (err) => {
+    res.writeHead(500, { "Content-Type": "text/plain" });
+    res.end("Proxy error: " + err.message);
+  });
 });
 
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+server.listen(port, host, () => {
+  console.log(`CORS Proxy running at http://${host}:${port}`);
 });
