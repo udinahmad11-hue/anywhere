@@ -1,70 +1,98 @@
-// service.js
-
 const express = require('express');
-const { pipeline } = require('stream');
+const { createProxyMiddleware } = require('http-proxy-middleware');
+const cors = require('cors');
+
 const app = express();
+const PORT = process.env.PORT || 8080;
 
-const PORT = process.env.PORT || 3000;
+// Enable CORS
+app.use(cors());
 
-// Bisa diganti sesuai kebutuhan
-const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN || '*';
-const ALLOWED_TARGET_HOSTS = []; // kosong = izinkan semua (hati-hati)
-
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', ALLOW_ORIGIN);
-  res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Range,Content-Type,Authorization');
-  res.setHeader('Access-Control-Expose-Headers', 'Content-Length,Content-Range,Accept-Ranges,Content-Type');
-
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-  next();
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: 'OK', 
+        service: 'CORS Proxy',
+        timestamp: new Date().toISOString() 
+    });
 });
 
-function isAllowedTarget(urlObj) {
-  if (!ALLOWED_TARGET_HOSTS.length) return true;
-  return ALLOWED_TARGET_HOSTS.includes(urlObj.hostname);
-}
-
-app.get('/*', async (req, res) => {
-  try {
-    const encodedTarget = req.originalUrl.slice(1);
-    if (!encodedTarget) return res.status(400).send('No target URL provided.');
-
-    const targetUrl = decodeURIComponent(encodedTarget);
-    let url;
-
-    try { url = new URL(targetUrl); }
-    catch { return res.status(400).send('Invalid target URL.'); }
-
-    if (!isAllowedTarget(url)) return res.status(403).send('Target host not allowed.');
-
-    const headers = {};
-    const rangeHeader = req.headers['range'];
-    if (rangeHeader) headers['range'] = rangeHeader;
-
-    headers['user-agent'] = req.headers['user-agent'] || 'koyeb-cors-proxy';
-
-    const upstream = await fetch(targetUrl, { headers });
-
-    res.status(upstream.status);
-
-    upstream.headers.forEach((value, name) => {
-      if (['content-type','content-length','content-range','accept-ranges','cache-control','etag','last-modified']
-          .includes(name.toLowerCase())) {
-        res.setHeader(name, value);
-      }
+// Simple home page with JSON response
+app.get('/', (req, res) => {
+    res.json({
+        service: 'CORS Proxy for Koyeb',
+        endpoints: {
+            health: 'GET /health',
+            proxy: 'GET /proxy?url=ENCODED_URL',
+            direct: 'GET /ENCODED_URL'
+        },
+        example: {
+            proxy: '/proxy?url=' + encodeURIComponent('https://example.com/api/data'),
+            direct: '/' + encodeURIComponent('https://example.com/api/data')
+        }
     });
-
-    if (!upstream.body) return res.sendStatus(502);
-
-    pipeline(upstream.body, res, err => {
-      if (err) console.error("Stream error:", err);
-    });
-
-  } catch (err) {
-    console.error("Proxy error:", err);
-    res.status(500).send('Proxy error');
-  }
 });
 
-app.listen(PORT, () => console.log(`Service running on port ${PORT}`));
+// Proxy endpoint with query parameter
+app.use('/proxy', createProxyMiddleware({
+    router: (req) => {
+        const targetUrl = req.query.url;
+        if (!targetUrl) {
+            throw new Error('URL parameter is required: /proxy?url=ENCODED_URL');
+        }
+        return new URL(targetUrl).origin;
+    },
+    pathRewrite: (path, req) => {
+        const targetUrl = req.query.url;
+        const urlObj = new URL(targetUrl);
+        return urlObj.pathname + urlObj.search;
+    },
+    changeOrigin: true,
+    onProxyReq: (proxyReq, req, res) => {
+        // Add CORS headers
+        proxyReq.setHeader('Origin', req.headers.origin || '*');
+    },
+    onProxyRes: (proxyRes, req, res) => {
+        proxyRes.headers['Access-Control-Allow-Origin'] = '*';
+        proxyRes.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS';
+    }
+}));
+
+// Direct proxy endpoint
+app.use('/:encodedUrl', (req, res, next) => {
+    try {
+        const encodedUrl = req.params.encodedUrl;
+        const targetUrl = decodeURIComponent(encodedUrl);
+        
+        return createProxyMiddleware({
+            target: targetUrl,
+            changeOrigin: true,
+            pathRewrite: (path, req) => {
+                const urlObj = new URL(targetUrl);
+                return urlObj.pathname + urlObj.search;
+            },
+            onProxyRes: (proxyRes, req, res) => {
+                proxyRes.headers['Access-Control-Allow-Origin'] = '*';
+            }
+        })(req, res, next);
+    } catch (error) {
+        res.status(400).json({ error: 'Invalid URL', message: error.message });
+    }
+});
+
+// Error handling
+app.use((err, req, res, next) => {
+    console.error('Error:', err.message);
+    res.status(500).json({ error: 'Internal Server Error', message: err.message });
+});
+
+// 404 handler
+app.use((req, res) => {
+    res.status(404).json({ error: 'Not Found', path: req.path });
+});
+
+// Start server
+app.listen(PORT, () => {
+    console.log(`🚀 CORS Proxy running on port ${PORT}`);
+    console.log(`📡 Health check: http://localhost:${PORT}/health`);
+});
