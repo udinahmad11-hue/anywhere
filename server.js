@@ -1,3 +1,14 @@
+const { execSync } = require('child_process');
+
+// Trik memaksa instalasi modul secara langsung saat runtime sebelum server menyala
+try {
+    require.resolve('cors-anywhere');
+} catch (e) {
+    console.log('Mengunduh dependensi cors-anywhere langsung di runtime...');
+    execSync('npm install cors-anywhere@^0.4.4 --no-audit --no-fund', { stdio: 'inherit' });
+    console.log('Dependensi berhasil diinstal!');
+}
+
 const cors_proxy = require('cors-anywhere');
 const http = require('http');
 
@@ -6,12 +17,12 @@ const port = process.env.PORT || 8000;
 
 // Konfigurasi dasar proxy
 const proxyServer = cors_proxy.createServer({
-    originWhitelist: [], // Izinkan semua origin
-    requireHeader: [],   // KOSONGKAN agar tidak wajib mengirim header origin/x-requested-with
+    originWhitelist: [], 
+    requireHeader: [],   
     removeHeaders: ['cookie', 'cookie2', 'x-request-user-agent', 'x-cosmetic-meta'],
     redirectSameOrigin: true,
     httpProxyOptions: {
-        xfwd: false, // Kita matikan xfwd bawaan agar tidak menimpa IP Singapore buatan kita
+        xfwd: false, // Dimatikan agar tidak menimpa IP Singapore buatan kita
     }
 });
 
@@ -25,8 +36,8 @@ const server = http.createServer((req, res) => {
         req.headers['x-requested-with'] = 'XMLHttpRequest';
     }
 
-    // 2. Suntik IP Singapore (Contoh: IP Leaseweb / Singtel Singapore)
-    const singaporeIP = '128.199.64.12'; // Kamu bisa ganti dengan IP SG operasional lainnya jika mau
+    // 2. Suntik IP Singapore (Contoh: IP Singtel Singapore)
+    const singaporeIP = '128.199.64.12'; 
     req.headers['x-forwarded-for'] = singaporeIP;
     req.headers['x-real-ip'] = singaporeIP;
     req.headers['client-ip'] = singaporeIP;
