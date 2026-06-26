@@ -37,7 +37,7 @@ const server = http.createServer((req, res) => {
     }
 
     // 2. Suntik IP Singapore (Contoh: IP Singtel Singapore)
-    const singaporeIP = '128.199.64.12'; 
+    const singaporeIP = '203.116.121.10'; 
     req.headers['x-forwarded-for'] = singaporeIP;
     req.headers['x-real-ip'] = singaporeIP;
     req.headers['client-ip'] = singaporeIP;
