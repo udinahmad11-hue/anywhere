@@ -1,16 +1,11 @@
 {
-  "name": "cors-anywhere-koyeb",
+  "name": "cors-anywhere",
   "version": "1.0.0",
   "private": true,
-  "description": "CORS Anywhere for Koyeb",
-  "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "cors-anywhere": "^0.4.4"
-  },
-  "engines": {
-    "node": "22.x"
   }
 }
