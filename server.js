@@ -16,8 +16,12 @@ const host = '0.0.0.0';
 const port = process.env.PORT || 8000;
 
 cors_proxy.createServer({
-    originWhitelist: [], 
-    requireHeader: ['origin', 'x-requested-with'],
+    originWhitelist: [], // Mengizinkan semua domain
+    
+    // --- PERUBAHAN UTAMA DI SINI ---
+    requireHeader: [], // DIKOSONGKAN agar tidak wajib mengirim header origin/x-requested-with
+    // -------------------------------
+
     removeHeaders: [
         'cookie',
         'cookie2',
@@ -29,5 +33,5 @@ cors_proxy.createServer({
         xfwd: true,
     }
 }).listen(port, host, () => {
-    console.log('CORS Anywhere proxy berjalan di ' + host + ':' + port);
+    console.log('CORS Anywhere proxy berjalan bebas di ' + host + ':' + port);
 });
