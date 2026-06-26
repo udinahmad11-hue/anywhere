@@ -1,11 +1,15 @@
 {
-  "name": "cors-proxy",
+  "name": "cors-anywhere-koyeb",
   "version": "1.0.0",
+  "description": "CORS Anywhere proxy for Koyeb",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "http-proxy": "1.11.1",
-    "proxy-from-env": "0.0.1"
+    "cors-anywhere": "^0.4.4"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
