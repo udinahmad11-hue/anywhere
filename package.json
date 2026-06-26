@@ -6,9 +6,6 @@
   "scripts": {
     "start": "node server.js"
   },
-  "dependencies": {
-    "cors-anywhere": "^0.4.4"
-  },
   "engines": {
     "node": ">=18.0.0"
   }
