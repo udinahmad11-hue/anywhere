@@ -1,2 +1,0 @@
-# CORS Anywhere Koyeb
-
