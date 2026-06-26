@@ -18,17 +18,16 @@ const port = process.env.PORT || 8000;
 // Konfigurasi dasar proxy
 const proxyServer = cors_proxy.createServer({
     originWhitelist: [], 
-    requireHeader: [],   
+    requireHeader: [],   // Tetap kosong agar player IPTV tidak kena blokir header
     removeHeaders: ['cookie', 'cookie2', 'x-request-user-agent', 'x-cosmetic-meta'],
     redirectSameOrigin: true,
     httpProxyOptions: {
-        xfwd: false, // Dimatikan agar tidak menimpa IP Singapore buatan kita
+        xfwd: true, // Kembalikan ke true agar jalur data diteruskan secara normal dan cepat
     }
 });
 
-// Buat server HTTP penengah untuk memaksa menyuntikkan header jika player mengirim request kosongan
+// Server HTTP penengah untuk bypass validasi origin kosong pada player
 const server = http.createServer((req, res) => {
-    // 1. Bypass validasi header bawaan cors-anywhere
     if (!req.headers.origin) {
         req.headers.origin = 'https://localhost';
     }
@@ -36,16 +35,10 @@ const server = http.createServer((req, res) => {
         req.headers['x-requested-with'] = 'XMLHttpRequest';
     }
 
-    // 2. Suntik IP Singapore (Contoh: IP Singtel Singapore)
-    const singaporeIP = '128.199.64.12'; 
-    req.headers['x-forwarded-for'] = singaporeIP;
-    req.headers['x-real-ip'] = singaporeIP;
-    req.headers['client-ip'] = singaporeIP;
-
-    // Oper ke cors-anywhere
+    // Oper langsung ke cors-anywhere tanpa modifikasi IP
     proxyServer.emit('request', req, res);
 });
 
 server.listen(port, host, () => {
-    console.log('CORS Anywhere + Spoofing IP Singapore berjalan di ' + host + ':' + port);
+    console.log('CORS Anywhere murni berjalan di ' + host + ':' + port);
 });
