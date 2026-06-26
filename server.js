@@ -3,7 +3,7 @@ const https = require("https");
 const { URL } = require("url");
 
 const host = "0.0.0.0";
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8000;
 
 // Helper: choose HTTP or HTTPS client
 function requestClient(url) {
