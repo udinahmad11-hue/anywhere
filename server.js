@@ -1,14 +1,22 @@
+const { execSync } = require('child_process');
+
+// Trik memaksa instalasi modul secara langsung saat runtime sebelum server menyala
+try {
+    require.resolve('cors-anywhere');
+} catch (e) {
+    console.log('Mengunduh dependensi cors-anywhere langsung di runtime...');
+    execSync('npm install cors-anywhere@^0.4.4 --no-audit --no-fund', { stdio: 'inherit' });
+    console.log('Dependensi berhasil diinstal!');
+}
+
+// Jalankan server seperti biasa setelah modul terpasang
 const cors_proxy = require('cors-anywhere');
 
-// Koyeb akan menyediakan PORT secara otomatis lewat environment variable
 const host = '0.0.0.0';
 const port = process.env.PORT || 8000;
 
 cors_proxy.createServer({
-    // Kamu bisa mengizinkan origin tertentu di sini jika ingin privat.
-    // Jika dikosongkan (enpty array), semua website bisa menembak proxy ini.
     originWhitelist: [], 
-    
     requireHeader: ['origin', 'x-requested-with'],
     removeHeaders: [
         'cookie',
@@ -18,7 +26,7 @@ cors_proxy.createServer({
     ],
     redirectSameOrigin: true,
     httpProxyOptions: {
-        xfwd: true, // Menambahkan header X-Forwarded-For
+        xfwd: true,
     }
 }).listen(port, host, () => {
     console.log('CORS Anywhere proxy berjalan di ' + host + ':' + port);
