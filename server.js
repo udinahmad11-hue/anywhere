@@ -1,36 +1,20 @@
-const host = '0.0.0.0';
-const port = process.env.PORT || 8000;
+const cors_proxy = require("cors-anywhere");
 
-// Increase parallel streams (important for DASH segments)
-require('http').globalAgent.maxSockets = 1000;
-require('https').globalAgent.maxSockets = 1000;
-
-const cors_proxy = require('./lib/cors-anywhere');
+const host = "0.0.0.0";
+const port = process.env.PORT || 8080;
 
 cors_proxy.createServer({
-  originWhitelist: [],
+  originWhitelist: [], // Izinkan semua origin
   requireHeader: [],
-  
   removeHeaders: [
-    'cookie',
-    'cookie2',
-    'x-request-start',
-    'x-request-id',
-    'via',
-    'connect-time',
-    'total-route-time'
+    "cookie",
+    "cookie2",
+    "x-forwarded-for",
+    "x-real-ip"
   ],
-  
-  httpProxyOptions: {
-    xfwd: false,
-    preserveHeaderKeyCase: true,
-    followRedirects: true,
-    ignorePath: false,
-    changeOrigin: true,
-  },
-  
-  redirectSameOrigin: false,
-  
-}).listen(port, host, function() {
-  console.log('CORS Proxy running on ' + host + ':' + port);
+  setHeaders: {
+    "X-Powered-By": "Koyeb CORS Anywhere"
+  }
+}).listen(port, host, () => {
+  console.log(`Running CORS Anywhere on ${host}:${port}`);
 });
