@@ -2,7 +2,7 @@
   "name": "cors-proxy",
   "version": "1.0.0",
   "scripts": {
-    "start": "npm install --no-package-lock && node server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "http-proxy": "1.11.1",
