@@ -4,6 +4,7 @@
   "description": "CORS Anywhere Proxy running on Koyeb",
   "main": "server.js",
   "scripts": {
+    "prestart": "npm install --no-audit --no-fund",
     "start": "node server.js"
   },
   "dependencies": {
